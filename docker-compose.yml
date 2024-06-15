@@ -8,7 +8,6 @@ services:
     image: postgres:latest
     restart: always
     container_name: tg_bot_template_postgres
-    hostname: ${POSTGRES_HOST}
     env_file:
       - .env
     environment:
@@ -18,7 +17,7 @@ services:
     volumes:
       - pg_project:/var/lib/postgresql/tg_bot_template
     ports:
-      - "5432:5432"
+      - "5433:5433"
 
   redis_fsm:
     image: redis:latest

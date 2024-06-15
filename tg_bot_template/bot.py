@@ -13,11 +13,11 @@ from loguru import logger
 from . import dp
 from .bot_content import features
 from .bot_content.errors import Errors
-from .bot_infra.callbacks import game_cb
+from .bot_infra.callbacks import game_cb, questions_cb
 from .bot_infra.filters import CreatorFilter, NonRegistrationFilter, RegistrationFilter
-from .bot_infra.states import UserForm, UserFormData
+from .bot_infra.states import UserForm, UserFormData, InterviewQuestion, UserInterviewData
 from .bot_lib.aiogram_overloads import DbDispatcher
-from .bot_lib.bot_feature import Feature, InlineButton, TgUser
+from .bot_lib.bot_feature import Feature, InlineButton, TgUser, Question
 from .bot_lib.utils import bot_edit_callback_message, bot_safe_send_message, bot_safe_send_photo
 from .config import settings
 from .db_infra import db, setup_db
@@ -26,7 +26,6 @@ from .db_infra import db, setup_db
 dp.filters_factory.bind(CreatorFilter)
 dp.filters_factory.bind(RegistrationFilter)
 dp.filters_factory.bind(NonRegistrationFilter)
-
 
 # -------------------------------------------- BASE HANDLERS ----------------------------------------------------------
 @dp.message_handler(lambda message: features.ping_ftr.find_triggers(message))
@@ -176,6 +175,90 @@ async def update_button_tap(*, taps: int) -> tuple[str, list[list[InlineButton]]
     return text, keyboard
 
 
+# -------------------------------------------- QUESTIONS HANDLERS ----------------------------------------------------------
+@dp.message_handler(Text(equals=features.question_ftr.triggers, ignore_case=True), registered=True)
+@dp.callback_query_handler(questions_cb.filter(action=features.question_ftr.callback_action_more), registered=True)
+async def send_question(msg: types.Message | types.CallbackQuery, state: FSMContext) -> None:
+    #  Получаю рандомный ID вопроса
+    id_question = await db.get_random_question_id()
+    # Передаю объекту вопроса все поля из объекта вопроса в БД
+    current_question = await db.get_question(question_gl_obj=Question(id = id_question))
+    # Получаю текст вопроса и ответы в клавиатуре
+    text, keyboard = await update_question_message(current_question=current_question)
+    # Отправляю изменения пользователю
+    if isinstance(msg, types.CallbackQuery):
+        await msg.message.answer(text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+        # Обновляю сообщение с вопросом после ответа — убираю кнопки, чтобы не жали
+        # TODO: А нужно ли убирать клаву или пусть висит?
+        await msg.message.edit_reply_markup()
+    else:
+        await msg.answer(text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+
+async def update_question_message(*, current_question: Question) -> tuple[str, list[list[InlineButton]]]:
+    # Получаю текст вопроса
+    text = current_question.question
+    # Передаю ответы в переменные
+    # TODO: Проработать динамическое количество ответов?
+    answer1, answer2, answer3  = current_question.answer1, current_question.answer2, current_question.answer3
+    # Определяем клавиатуру
+    keyboard = []
+    # Динамически добавляем кнопочки, если есть варианты ответов
+    for current_answer in (answer1, answer2, answer3):
+        if current_answer != None:
+            #  Проверяем, верен ли ответ, обновляем значение для кнопки
+            if current_answer == current_question.right_answer: answer = "correct"
+            else: answer = "incorrect"
+            # Добавляем кнопку
+            keyboard.append([InlineButton(text = current_answer,
+                                          callback_data = questions_cb.new(action="answer",
+                                                                           answer=answer))])
+        else:
+            pass
+    
+    # Добавляем кнопку «Меню» в любом случае
+    keyboard.append([InlineButton(
+                text=features.start_ftr.button,
+                callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+            )])
+    return text, keyboard
+
+async def update_answer_message_keyboard() -> tuple[str, list[list[InlineButton]]]:
+    # Добавляем кнопку «Меню» в любом случае
+    keyboard =[
+        [InlineButton(text=features.question_ftr.button,
+            callback_data=questions_cb.new(action=features.question_ftr.callback_action_more, answer="None")
+        )],
+        [InlineButton(
+            text=features.start_ftr.button,
+            callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+        )],
+    ]
+    return keyboard
+
+# Обрабатываю нажатие на кнопку «Меню»
+# TODO: Действительно нужно делать отдельный обработчик из-за questions_cb.filter?
+@dp.callback_query_handler(questions_cb.filter(action=features.start_ftr.callback_action), registered=True)
+async def start_from_questions(msg: types.Message | types.CallbackQuery) -> None:
+    await msg.message.edit_reply_markup()
+    await main_menu(from_user_id=msg.from_user.id)
+    if isinstance(msg, types.CallbackQuery):
+        await msg.answer()
+
+@dp.callback_query_handler(questions_cb.filter(action=features.question_ftr.callback_action), registered=True)
+async def check_answer(callback: types.CallbackQuery, callback_data: dict) -> None:
+    # Обновляю количество вопросов у пользователя
+    user_questions, user_right_answers = await db.incr_user_questions(tg_user=TgUser(tg_id=callback.from_user.id, username=callback.from_user.username), answer = callback_data["answer"]) 
+    
+    # Отправляю сообщение с результатом
+    if callback_data["answer"] == "correct": text = f"Ответ верный!"
+    else: text = f"Ответ неверный."
+    text += f"\nВсего вопросов: {user_questions}\nВерных ответов: {user_right_answers}"
+    keyboard = await update_answer_message_keyboard()
+    await callback.message.answer(text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+
+    # Обновляю сообщение с вопросом после ответа — убираю кнопки, чтобы не жали
+    await callback.message.edit_reply_markup()
+
 # -------------------------------------------- SERVICE HANDLERS -------------------------------------------------------
 @dp.message_handler(content_types=["any"], not_registered=True)
 async def registration(msg: types.Message) -> types.Message | None:
@@ -235,7 +318,7 @@ async def on_startup(dispatcher: DbDispatcher) -> None:
     cmds = Feature.commands_to_set
     bot_commands = [types.BotCommand(ftr.slashed_command, ftr.slashed_command_descr) for ftr in cmds]
     await dispatcher.bot.set_my_commands(bot_commands)
-
+    
     # scheduler startup
     asyncio.create_task(bot_scheduler())
 
@@ -244,7 +327,7 @@ async def on_shutdown(dispatcher: DbDispatcher) -> None:
     await dispatcher.storage.close()
     await dispatcher.storage.wait_closed()
 
-
 if __name__ == "__main__":
     dp.set_db_conn(conn=setup_db(settings))
+
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown)

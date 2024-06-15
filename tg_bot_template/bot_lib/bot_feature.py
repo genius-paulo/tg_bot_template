@@ -22,6 +22,13 @@ class TgUser(BaseModel):
     tg_id: int
     username: str | None
 
+class Question(BaseModel):
+    id: int
+    question: str | None
+    answer1: str | None
+    answer2: str | None
+    answer3: str | None
+    right_answer: str | None
 
 class Button(BaseModel):
     text: str
@@ -58,6 +65,7 @@ class Feature(ClassWithRepr):
         inline_keyboard: list[list[InlineButton]] | None = None,
         one_time_keyboard: bool = False,
         callback_action: str | None = None,
+        callback_action_more: str | None = None,
         data_key: str | None = None,
         menu: FeatureMenu | None = None,  # need attrs: self.button, self.slashed_command and self.about
         set_to_bot_commands: bool = False,  # need attrs: self.slashed_command and self.slashed_command_descr
@@ -76,6 +84,7 @@ class Feature(ClassWithRepr):
         self.one_time_keyboard = one_time_keyboard
         self.inline_keyboard = inline_keyboard
         self.callback_action = callback_action
+        self.callback_action_more = callback_action_more
         self.data_key = data_key
         self.menu = menu
 
