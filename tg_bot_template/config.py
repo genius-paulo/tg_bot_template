@@ -30,7 +30,7 @@ class BotSettings(BaseSettings):
     schedule_healthcheck: str = "7:00"  # !!!UTC timezone!!!
 
     class Config:
-        env_file = ".env"
+        env_file = "../.env"
 
 
 settings = BotSettings()

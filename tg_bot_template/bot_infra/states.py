@@ -17,9 +17,12 @@ class UserForm(StatesGroup):  # type: ignore[misc]
 
 
 class InterviewQuestion(StatesGroup):  # type: ignore[misc]
-    question = State()
-    description = State()
+    start_quiz = State()
+    send_question = State()
+    check_answer = State()
+
 
 @dataclass
 class UserInterviewData:
-    answer: str
+    question_ids: list
+    right_answers: int

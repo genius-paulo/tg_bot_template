@@ -22,6 +22,7 @@ class TgUser(BaseModel):
     tg_id: int
     username: str | None
 
+
 class Question(BaseModel):
     id: int
     question: str | None
@@ -29,6 +30,7 @@ class Question(BaseModel):
     answer2: str | None
     answer3: str | None
     right_answer: str | None
+
 
 class Button(BaseModel):
     text: str
