@@ -210,15 +210,15 @@ async def get_start_quiz_message():
     # Get question text
     text = "Добро пожаловать в викторину. Начнем?"
     # Define keyboard
-    keyboard = [[InlineButton(text="Поехали",
-                              callback_data=questions_cb.new(action="answer",
-                                                             answer="Start quiz"))]]
+    keyboard = [[InlineButton(text="Поехали", callback_data=questions_cb.new(action="answer", answer="Start quiz"))]]
     return text, keyboard
 
 
-@dp.callback_query_handler(questions_cb.filter(action=features.question_ftr.callback_action),
-                           registered=True,
-                           state=InterviewQuestion.send_question)
+@dp.callback_query_handler(
+    questions_cb.filter(action=features.question_ftr.callback_action),
+    registered=True,
+    state=InterviewQuestion.send_question,
+)
 async def send_question(msg: types.CallbackQuery, state: FSMContext) -> None:
     # Check state
     logger.info(f"Current state: {await state.get_state()}")
@@ -268,24 +268,29 @@ async def update_question_message(*, current_question: Question) -> tuple[str, l
                 answer = "correct"
             else:
                 answer = "incorrect"
-            keyboard.append([InlineButton(text=current_answer,
-                                          callback_data=questions_cb.new(action="answer",
-                                                                         answer=answer))])
+            keyboard.append(
+                [InlineButton(text=current_answer, callback_data=questions_cb.new(action="answer", answer=answer))]
+            )
         else:
             pass
-    
+
     # Add menu button
-    keyboard.append([InlineButton(
+    keyboard.append(
+        [
+            InlineButton(
                 text=features.start_ftr.button,
-                callback_data=questions_cb.new(action=features.start_ftr.callback_action,
-                                               answer="None"),
-            )])
+                callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+            )
+        ]
+    )
     return text, keyboard
 
 
-@dp.callback_query_handler(questions_cb.filter(action=features.question_ftr.callback_action),
-                           registered=True,
-                           state=InterviewQuestion.check_answer)
+@dp.callback_query_handler(
+    questions_cb.filter(action=features.question_ftr.callback_action),
+    registered=True,
+    state=InterviewQuestion.check_answer,
+)
 async def check_answer(callback: types.CallbackQuery, callback_data: dict, state: FSMContext) -> None:
     # Check state
     logger.info(f"Current state: {await state.get_state()}")
@@ -311,12 +316,18 @@ async def check_answer(callback: types.CallbackQuery, callback_data: dict, state
 async def update_answer_message_keyboard() -> tuple[list[InlineButton], list[InlineButton]]:
     # Add menu button
     keyboard = (
-        [InlineButton(text=features.question_ftr.button,
-                      callback_data=questions_cb.new(action=features.question_ftr.callback_action,
-                                                     answer="None"))],
-        [InlineButton(text=features.start_ftr.button,
-                      callback_data=questions_cb.new(action=features.start_ftr.callback_action,
-                                                     answer="None"))],
+        [
+            InlineButton(
+                text=features.question_ftr.button_in_question,
+                callback_data=questions_cb.new(action=features.question_ftr.callback_action, answer="None"),
+            )
+        ],
+        [
+            InlineButton(
+                text=features.start_ftr.button,
+                callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+            )
+        ],
     )
     return keyboard
 
@@ -326,19 +337,20 @@ async def finish_quiz(msg: types.CallbackQuery, right_answers: int, all_question
     await msg.message.edit_reply_markup()
     # Update value answers and questions to user
     user_questions, user_right_answers = await db.incr_user_questions(
-        tg_user=TgUser(tg_id=msg.from_user.id,
-                       username=msg.from_user.username),
-        right_answers=right_answers, all_questions=all_questions)
-    text = (f"Викторина завершена. Ваш результат: {right_answers}/{all_questions}."
-            f"\nВсего вопросов пройдено: {user_questions}."
-            f"\nВсего верных ответов: {user_right_answers}.")
+        tg_user=TgUser(tg_id=msg.from_user.id, username=msg.from_user.username),
+        right_answers=right_answers,
+        all_questions=all_questions,
+    )
+    text = (
+        f"Викторина завершена. Ваш результат: {right_answers}/{all_questions}."
+        f"\nВсего вопросов пройдено: {user_questions}."
+        f"\nВсего верных ответов: {user_right_answers}."
+    )
     await msg.message.answer(text)
 
 
 # Tap menu button
-@dp.callback_query_handler(questions_cb.filter(action=features.start_ftr.callback_action),
-                           registered=True,
-                           state="*")
+@dp.callback_query_handler(questions_cb.filter(action=features.start_ftr.callback_action), registered=True, state="*")
 async def exit_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext) -> None:
     logger.info("User taps menu button. Ending the quiz, reset answers...")
     # TODO: Reset answers from data here
@@ -411,7 +423,7 @@ async def on_startup(dispatcher: DbDispatcher) -> None:
     cmds = Feature.commands_to_set
     bot_commands = [types.BotCommand(ftr.slashed_command, ftr.slashed_command_descr) for ftr in cmds]
     await dispatcher.bot.set_my_commands(bot_commands)
-    
+
     # scheduler startup
     asyncio.create_task(bot_scheduler())
 
@@ -419,6 +431,7 @@ async def on_startup(dispatcher: DbDispatcher) -> None:
 async def on_shutdown(dispatcher: DbDispatcher) -> None:
     await dispatcher.storage.close()
     await dispatcher.storage.wait_closed()
+
 
 if __name__ == "__main__":
     dp.set_db_conn(conn=setup_db(settings))

@@ -9,7 +9,6 @@ class Buttons:
     set_incr_question: str = "Имитация ответа: +1 к верным ответам"
 
 
-
 empty = Feature()
 ping_ftr = Feature(
     commands=["ping", "health", "healthcheck"],
@@ -54,10 +53,11 @@ rating_ftr = Feature(
 question_ftr = Feature(
     slashed_command="/get_question",
     slashed_command_descr="get question",
-    button="Получить вопрос",
-    about="Получите вопрос о Python и попробуйте ответить правильно",
+    button="Викторина про Python",
+    about="Попробуйте ответить правильно на все вопросы о Python",
     text="Это текст вопроса",
     callback_action="answer",
+    button_in_question="Дальше",
     callback_action_more="more_question",
     set_to_bot_commands=True,
 )

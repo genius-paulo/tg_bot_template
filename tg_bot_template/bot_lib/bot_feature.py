@@ -62,6 +62,7 @@ class Feature(ClassWithRepr):
         slashed_command: str | None = None,
         slashed_command_descr: str | None = None,
         button: str | None = None,
+        button_in_question: str | None = None,
         commands: list[str] | None = None,
         keyboard: list[list[Button]] | None = None,
         inline_keyboard: list[list[InlineButton]] | None = None,
@@ -81,6 +82,7 @@ class Feature(ClassWithRepr):
         self.slashed_command = slashed_command
         self.slashed_command_descr = slashed_command_descr
         self.button = button
+        self.button_in_question = button_in_question
         self.commands = commands
         self.keyboard = keyboard
         self.one_time_keyboard = one_time_keyboard
