@@ -5,11 +5,11 @@ question_dict = {'question1':
                       'answer3': 'У названия нет предыстории',
                       'right_answer': 'Из названия сериала'},
                  'question2':
-                     {'question': 'Что делает функция enumerate()?',
-                      'answer1': 'Присваивает элементам списка ключи',
-                      'answer2': 'Возвращает кортежи из индекса и элемента',
-                      'answer3': 'Объединяет два списка в один',
-                      'right_answer': 'Возвращает кортежи из индекса и элемента'},
+                     {'question': 'Для чего используется функция setattr() в объекте?',
+                      'answer1': 'Доступ к атрибуту',
+                      'answer2': 'Проверка наличия атрибута',
+                      'answer3': 'Установка значения атрибута',
+                      'right_answer': 'Установка значения атрибута'},
                  'question3':
                      {
                          'question': 'Какой метод вызывается при использовании оператора in для проверки наличия '
@@ -77,4 +77,63 @@ question_dict = {'question1':
                          'answer1': 'ValueError',
                          'answer2': 'TypeError',
                          'answer3': 'AttributeError',
-                         'right_answer': 'TypeError'}}
+                         'right_answer': 'TypeError'},
+                 'question13':
+                     {
+                         'question': 'Имеется кортеж вида T = (4, 2, 3). Какая из операций приведёт к тому, что имя T '
+                                     'будет ссылаться на кортеж (1, 2, 3)',
+                         'answer1': 'T[0] = 1',
+                         'answer2': 'T = (1) + T[1:]',
+                         'answer3': 'T = (1,) + T[1:]',
+                         'right_answer': 'T = (1,) + T[1:]'},
+                 'question14':
+                     {
+                         'question': 'Нужно собрать и вывести все уникальные слова из строки текста. Какой из типов '
+                                     'данных подходит лучше всего?',
+                         'answer1': 'кортеж (tuple)',
+                         'answer2': 'список (list)',
+                         'answer3': 'множество (set)',
+                         'right_answer': 'множество (set)'},
+                 'question15':
+                     {
+                         'question': 'Как вывести список методов и атрибутов объекта x?',
+                         'answer1': 'help(x)',
+                         'answer2': 'info(x)',
+                         'answer3': 'dir(x)',
+                         'right_answer': 'dir(x)'},
+                 'question16':
+                     {
+                         'question': 'Какая из перечисленных инструкций выполнится быстрее всего, если n = 10**6?',
+                         'answer1': 'a = list(i for i in range(n))',
+                         'answer2': 'a = [i for i in range(n)]',
+                         'answer3': 'a = (i for i in range(n))',
+                         'right_answer': 'a = (i for i in range(n))'},
+                 'question17':
+                     {
+                         'question': 'С помощью Python нужно записать данные в файл, но только в том случае, '
+                                     'если файла ещё нет. Какой режим указать в инструкции open()?',
+                         'answer1': 'x',
+                         'answer2': 'w',
+                         'answer3': 'r',
+                         'right_answer': 'x'},
+                 'question18':
+                     {
+                         'question': 'Что делает следующий код? def a(b, c, d): pass',
+                         'answer1': 'Определяет пустой класс',
+                         'answer2': 'Инициализирует список',
+                         'answer3': 'Определяет пустую функцию',
+                         'right_answer': 'Определяет пустую функцию'},
+                 'question19':
+                     {
+                         'question': 'Что выведет следующий фрагмент кода? x = 4.5 y = 2 print(x // y)',
+                         'answer1': '2.0',
+                         'answer2': '2.25',
+                         'answer3': '9.0',
+                         'right_answer': '2.0'},
+                 'question20':
+                     {
+                         'question': 'Какое ключевое слово используется для определения функции в Python?',
+                         'answer1': 'func',
+                         'answer2': 'define',
+                         'answer3': 'def',
+                         'right_answer': 'def'}}

@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any, Type, Tuple, List
+import os
 
 import aioschedule
 from aiogram import types
@@ -347,6 +348,31 @@ async def finish_quiz(msg: types.CallbackQuery, right_answers: int, all_question
         f"\nВсего верных ответов: {user_right_answers}."
     )
     await msg.message.answer(text)
+    logger.debug(os.path.abspath(__file__))
+
+    path_to_result_pic = await get_result_quiz_picture(msg, all_questions, right_answers)
+    with open(path_to_result_pic, 'rb') as photo:
+        await bot_safe_send_photo(dp, msg.from_user.id, photo)
+    os.remove(path_to_result_pic)
+    logger.debug(f'File with result ({path_to_result_pic}) removed.')
+
+
+async def get_result_quiz_picture(msg, questions: int, right_answers: int):
+    from PIL import Image, ImageFont, ImageDraw
+    path_to_result_quiz_picture = os.path.dirname(os.path.abspath(__file__)) + '/bot_content/result_pic.jpg'
+    logger.debug(f'Path to picture with result of quiz: {path_to_result_quiz_picture}')
+    result_quiz_picture = Image.open(path_to_result_quiz_picture)
+    font = ImageFont.load_default(size=220)
+    pencil = ImageDraw.Draw(result_quiz_picture)
+    text = f'{right_answers}/{questions}'
+    logger.debug(f'Text with result of quiz: {text}')
+    pencil.text((60, 600), text, font=font, stroke_width=5, stroke_fill='purple')
+    path_to_result_quiz_picture = (os.path.dirname(os.path.abspath(__file__))
+                                   + '/bot_content/result_pic'
+                                   + str(msg.from_user.id) + '.jpg')
+    logger.debug(f'Path to save result pic: {path_to_result_quiz_picture}')
+    result_quiz_picture.save(path_to_result_quiz_picture)
+    return path_to_result_quiz_picture
 
 
 # Tap menu button

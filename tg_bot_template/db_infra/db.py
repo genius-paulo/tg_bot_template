@@ -84,7 +84,7 @@ async def get_random_question_ids() -> list | None:
     # Get all question id from db
     questions_ids = list(await _get_conn().execute(Questions.select().order_by(Questions.id.desc())))
     # Get list with 10 int ids
-    ten_random_questions_ids = list(map(int, (map(str, random.choices(questions_ids, k=10)))))
+    ten_random_questions_ids = list(map(int, (map(str, random.sample(questions_ids, k=10)))))
     return ten_random_questions_ids
 
 
