@@ -20,6 +20,7 @@ python-dotenv = "0.10.4"
 ujson = "5.8.0"
 msgpack = "^1.0.7"
 
+pillow = "^10.4.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

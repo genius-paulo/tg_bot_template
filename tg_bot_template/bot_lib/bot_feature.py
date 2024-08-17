@@ -23,6 +23,15 @@ class TgUser(BaseModel):
     username: str | None
 
 
+class Question(BaseModel):
+    id: int
+    question: str | None
+    answer1: str | None
+    answer2: str | None
+    answer3: str | None
+    right_answer: str | None
+
+
 class Button(BaseModel):
     text: str
 
@@ -53,11 +62,13 @@ class Feature(ClassWithRepr):
         slashed_command: str | None = None,
         slashed_command_descr: str | None = None,
         button: str | None = None,
+        button_in_question: str | None = None,
         commands: list[str] | None = None,
         keyboard: list[list[Button]] | None = None,
         inline_keyboard: list[list[InlineButton]] | None = None,
         one_time_keyboard: bool = False,
         callback_action: str | None = None,
+        callback_action_more: str | None = None,
         data_key: str | None = None,
         menu: FeatureMenu | None = None,  # need attrs: self.button, self.slashed_command and self.about
         set_to_bot_commands: bool = False,  # need attrs: self.slashed_command and self.slashed_command_descr
@@ -71,11 +82,13 @@ class Feature(ClassWithRepr):
         self.slashed_command = slashed_command
         self.slashed_command_descr = slashed_command_descr
         self.button = button
+        self.button_in_question = button_in_question
         self.commands = commands
         self.keyboard = keyboard
         self.one_time_keyboard = one_time_keyboard
         self.inline_keyboard = inline_keyboard
         self.callback_action = callback_action
+        self.callback_action_more = callback_action_more
         self.data_key = data_key
         self.menu = menu
 

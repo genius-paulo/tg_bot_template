@@ -6,6 +6,7 @@ from tg_bot_template.bot_lib.bot_feature import Button, Feature, FeatureMenu, Tg
 @dataclass
 class Buttons:
     menu: str = "Меню"
+    set_incr_question: str = "Имитация ответа: +1 к верным ответам"
 
 
 empty = Feature()
@@ -49,6 +50,17 @@ rating_ftr = Feature(
     text2=f"Лучший жмакер:\n{{name}}[{TgUtils.dog}{{username}}]\n{{info}}",
     set_to_bot_commands=True,
 )
+question_ftr = Feature(
+    slashed_command="/get_question",
+    slashed_command_descr="get question",
+    button="Викторина про Python",
+    about="Попробуйте ответить правильно на все вопросы о Python",
+    text="Это текст вопроса",
+    callback_action="answer",
+    button_in_question="Дальше",
+    callback_action_more="more_question",
+    set_to_bot_commands=True,
+)
 start_ftr = Feature(
     slashed_command="/start",
     slashed_command_descr="main menu",
@@ -57,7 +69,7 @@ start_ftr = Feature(
     text="Добро пожаловать в главное меню",
     button=Buttons.menu,
     callback_action="main_menu",
-    menu=FeatureMenu(grid=[[press_button_ftr], [rating_ftr], [set_user_info]]),
+    menu=FeatureMenu(grid=[[press_button_ftr], [rating_ftr], [set_user_info], [question_ftr]]),
     set_to_bot_commands=True,
     one_time_keyboard=True,
 )
