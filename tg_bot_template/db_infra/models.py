@@ -13,6 +13,7 @@ class Users(peewee.Model):  # type: ignore[misc]
     info = peewee.TextField(null=True)
     photo = peewee.TextField(null=True)
 
+
 class Questions(peewee.Model):  # type: ignore[misc]
     id = peewee.PrimaryKeyField(null=False)
     question = peewee.TextField(null=True)

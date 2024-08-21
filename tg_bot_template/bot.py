@@ -1,7 +1,9 @@
 import asyncio
-from typing import Any, Type, Tuple, List
+from typing import Any, Type
 import os
 
+import aiofiles
+import aiofiles.os
 import aioschedule
 from aiogram import types
 from aiogram.dispatcher import FSMContext
@@ -10,6 +12,9 @@ from aiogram.dispatcher.filters.state import StatesGroup
 from aiogram.utils import executor
 from aiogram.utils.exceptions import RetryAfter, BotBlocked
 from loguru import logger
+
+from PIL import Image, ImageFont, ImageDraw
+from concurrent.futures import ThreadPoolExecutor
 
 from . import dp
 from .bot_content import features
@@ -191,7 +196,7 @@ async def start_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext
         current_state = await state.get_state()
         logger.info(f"State changed. Current state: {current_state}")
         # Send question
-        text, keyboard = await get_start_quiz_message()
+        feature_txt_kb = await get_start_quiz_message()
         #  Get and set random questions ids to state.data
         question_ids = await db.get_random_question_ids()
         logger.info(f"Get 10 question ids in list: {question_ids}")
@@ -199,7 +204,7 @@ async def start_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext
         # Set number of right answers
         await state.update_data(right_answers=0)
         # Send changes to user
-        await msg.answer(text=text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+        await msg.answer(text=feature_txt_kb.text, reply_markup=Feature.create_tg_inline_kb(feature_txt_kb.keyboard))
         # Check state
         logger.info(f"Current state: {await state.get_state()}")
         # Set and check state
@@ -207,12 +212,14 @@ async def start_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext
         logger.info(f"State changed. Current state: {await state.get_state()}")
 
 
-async def get_start_quiz_message():
+async def get_start_quiz_message() -> Feature:
+    # Create instance of Feature
+    start_quiz_message = Feature()
     # Get question text
-    text = "Добро пожаловать в викторину. Начнем?"
+    start_quiz_message.text = "Добро пожаловать в викторину. Начнем?"
     # Define keyboard
-    keyboard = [[InlineButton(text="Поехали", callback_data=questions_cb.new(action="answer", answer="Start quiz"))]]
-    return text, keyboard
+    start_quiz_message.keyboard = [[InlineButton(text="Поехали", callback_data=questions_cb.new(action="answer", answer="Start quiz"))]]
+    return start_quiz_message
 
 
 @dp.callback_query_handler(
@@ -246,9 +253,9 @@ async def send_question(msg: types.CallbackQuery, state: FSMContext) -> None:
         # Give all fields to question object from db object
         current_question = await db.get_question(question_gl_obj=Question(id=current_questions_id))
         # Get question text and answers in keyboard
-        text, keyboard = await update_question_message(current_question=current_question)
+        updated_question_message = await update_question_message(current_question=current_question)
         # Send changes to user
-        await msg.message.answer(text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+        await msg.message.answer(updated_question_message.text, reply_markup=Feature.create_tg_inline_kb(updated_question_message.keyboard))
         # Send message with question, delete buttons
         await msg.message.edit_reply_markup()
         # Set state
@@ -256,27 +263,26 @@ async def send_question(msg: types.CallbackQuery, state: FSMContext) -> None:
         logger.info(f"State changed. Current state: {await state.get_state()}")
 
 
-async def update_question_message(*, current_question: Question) -> tuple[str, list[list[InlineButton]]]:
+async def update_question_message(*, current_question: Question) -> Feature:
+    updated_question_message = Feature()
     # Get question text
-    text = current_question.question
-    # Set answers in variables
-    answer1, answer2, answer3 = current_question.answer1, current_question.answer2, current_question.answer3
+    updated_question_message.text = current_question.question
     # Define keyboard with answers
-    keyboard = []
-    for current_answer in (answer1, answer2, answer3):
+    updated_question_message.keyboard = []
+    for current_answer in (current_question.answer1, current_question.answer2, current_question.answer3):
         if current_answer is not None:
             if current_answer == current_question.right_answer:
                 answer = "correct"
             else:
                 answer = "incorrect"
-            keyboard.append(
+            updated_question_message.keyboard.append(
                 [InlineButton(text=current_answer, callback_data=questions_cb.new(action="answer", answer=answer))]
             )
         else:
             pass
 
     # Add menu button
-    keyboard.append(
+    updated_question_message.keyboard.append(
         [
             InlineButton(
                 text=features.start_ftr.button,
@@ -284,7 +290,7 @@ async def update_question_message(*, current_question: Question) -> tuple[str, l
             )
         ]
     )
-    return text, keyboard
+    return updated_question_message
 
 
 @dp.callback_query_handler(
@@ -350,15 +356,21 @@ async def finish_quiz(msg: types.CallbackQuery, right_answers: int, all_question
     await msg.message.answer(text)
     logger.debug(os.path.abspath(__file__))
 
-    path_to_result_pic = await get_result_quiz_picture(msg, all_questions, right_answers)
-    with open(path_to_result_pic, 'rb') as photo:
+    # Generate picture with ThreadPoolExecutor
+    logger.debug('Start generate picture with ThreadPoolExecutor')
+    with ThreadPoolExecutor() as executor:
+        exec_pic_func = executor.submit(get_result_quiz_picture, msg, all_questions, right_answers)
+    path_to_result_pic = exec_pic_func.result()
+    logger.debug(f'End generate picture with ThreadPoolExecutor. Path: {path_to_result_pic}')
+
+    # Send and delete result picture
+    async with aiofiles.open(path_to_result_pic, 'rb') as photo:
         await bot_safe_send_photo(dp, msg.from_user.id, photo)
-    os.remove(path_to_result_pic)
-    logger.debug(f'File with result ({path_to_result_pic}) removed.')
+    await aiofiles.os.remove(path_to_result_pic)
+    logger.debug(f'File with result ({path_to_result_pic}) sent and removed.')
 
 
-async def get_result_quiz_picture(msg, questions: int, right_answers: int):
-    from PIL import Image, ImageFont, ImageDraw
+def get_result_quiz_picture(msg, questions: int, right_answers: int):
     path_to_result_quiz_picture = os.path.dirname(os.path.abspath(__file__)) + '/bot_content/result_pic.jpg'
     logger.debug(f'Path to picture with result of quiz: {path_to_result_quiz_picture}')
     result_quiz_picture = Image.open(path_to_result_quiz_picture)
