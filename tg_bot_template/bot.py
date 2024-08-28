@@ -358,9 +358,7 @@ async def finish_quiz(msg: types.CallbackQuery, right_answers: int, all_question
 
     # Generate picture with ThreadPoolExecutor
     logger.debug('Start generate picture with ThreadPoolExecutor')
-    with ThreadPoolExecutor() as executor:
-        exec_pic_func = executor.submit(get_result_quiz_picture, msg, all_questions, right_answers)
-    path_to_result_pic = exec_pic_func.result()
+    path_to_result_pic = await asyncio.to_thread(get_result_quiz_picture, msg, all_questions, right_answers)
     logger.debug(f'End generate picture with ThreadPoolExecutor. Path: {path_to_result_pic}')
 
     # Send and delete result picture
