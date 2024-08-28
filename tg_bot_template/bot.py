@@ -1,6 +1,9 @@
 import asyncio
 from typing import Any, Type
+import os
 
+import aiofiles
+import aiofiles.os
 import aioschedule
 from aiogram import types
 from aiogram.dispatcher import FSMContext
@@ -10,14 +13,17 @@ from aiogram.utils import executor
 from aiogram.utils.exceptions import RetryAfter, BotBlocked
 from loguru import logger
 
+from PIL import Image, ImageFont, ImageDraw
+from concurrent.futures import ThreadPoolExecutor
+
 from . import dp
 from .bot_content import features
 from .bot_content.errors import Errors
-from .bot_infra.callbacks import game_cb
+from .bot_infra.callbacks import game_cb, questions_cb
 from .bot_infra.filters import CreatorFilter, NonRegistrationFilter, RegistrationFilter
-from .bot_infra.states import UserForm, UserFormData
+from .bot_infra.states import UserForm, UserFormData, InterviewQuestion, UserInterviewData
 from .bot_lib.aiogram_overloads import DbDispatcher
-from .bot_lib.bot_feature import Feature, InlineButton, TgUser
+from .bot_lib.bot_feature import Feature, InlineButton, TgUser, Question
 from .bot_lib.utils import bot_edit_callback_message, bot_safe_send_message, bot_safe_send_photo
 from .config import settings
 from .db_infra import db, setup_db
@@ -176,6 +182,224 @@ async def update_button_tap(*, taps: int) -> tuple[str, list[list[InlineButton]]
     return text, keyboard
 
 
+# ------------------------------------------ QUESTIONS HANDLERS --------------------------------------------------------
+@dp.message_handler(Text(equals=features.question_ftr.triggers, ignore_case=True), registered=True)
+async def start_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext) -> None:
+    # Check state
+    current_state = await state.get_state()
+    logger.info(f"Current state: {current_state}")
+    if current_state == InterviewQuestion.send_question or current_state == InterviewQuestion.check_answer:
+        logger.info(f"User wants quiz, but he has quiz already: {current_state}")
+    else:
+        # Set and check state
+        await state.set_state(InterviewQuestion.start_quiz)
+        current_state = await state.get_state()
+        logger.info(f"State changed. Current state: {current_state}")
+        # Send question
+        feature_txt_kb = await get_start_quiz_message()
+        #  Get and set random questions ids to state.data
+        question_ids = await db.get_random_question_ids()
+        logger.info(f"Get 10 question ids in list: {question_ids}")
+        await state.update_data(question_ids=question_ids)
+        # Set number of right answers
+        await state.update_data(right_answers=0)
+        # Send changes to user
+        await msg.answer(text=feature_txt_kb.text, reply_markup=Feature.create_tg_inline_kb(feature_txt_kb.keyboard))
+        # Check state
+        logger.info(f"Current state: {await state.get_state()}")
+        # Set and check state
+        await state.set_state(InterviewQuestion.send_question)
+        logger.info(f"State changed. Current state: {await state.get_state()}")
+
+
+async def get_start_quiz_message() -> Feature:
+    # Create instance of Feature
+    start_quiz_message = Feature()
+    # Get question text
+    start_quiz_message.text = "Добро пожаловать в викторину. Начнем?"
+    # Define keyboard
+    start_quiz_message.keyboard = [[InlineButton(text="Поехали", callback_data=questions_cb.new(action="answer", answer="Start quiz"))]]
+    return start_quiz_message
+
+
+@dp.callback_query_handler(
+    questions_cb.filter(action=features.question_ftr.callback_action),
+    registered=True,
+    state=InterviewQuestion.send_question,
+)
+async def send_question(msg: types.CallbackQuery, state: FSMContext) -> None:
+    # Check state
+    logger.info(f"Current state: {await state.get_state()}")
+    # Get state.data
+    data = await state.get_data()
+    logger.info(f"All of data: {data}")
+    question_ids = data["question_ids"]
+    logger.info(f"Get question_ids from data of state: {question_ids}")
+    answers_data = data["right_answers"]
+    logger.info(f"Get number of right answers: {answers_data}")
+
+    # Check question_ids for emptiness
+    if not question_ids:
+        logger.info("question_ids is empty. Finish state")
+        # Get attributes for finish_quiz. There is a fix number of 10 questions
+        await finish_quiz(msg, answers_data, all_questions=10)
+        await state.finish()
+    else:
+        # Get current question id
+        current_questions_id = question_ids.pop()
+        await state.update_data(question_ids=question_ids)
+        logger.info(f"Get current question id: {current_questions_id}. List of question ids: {question_ids}")
+
+        # Give all fields to question object from db object
+        current_question = await db.get_question(question_gl_obj=Question(id=current_questions_id))
+        # Get question text and answers in keyboard
+        updated_question_message = await update_question_message(current_question=current_question)
+        # Send changes to user
+        await msg.message.answer(updated_question_message.text, reply_markup=Feature.create_tg_inline_kb(updated_question_message.keyboard))
+        # Send message with question, delete buttons
+        await msg.message.edit_reply_markup()
+        # Set state
+        await state.set_state(InterviewQuestion.check_answer)
+        logger.info(f"State changed. Current state: {await state.get_state()}")
+
+
+async def update_question_message(*, current_question: Question) -> Feature:
+    updated_question_message = Feature()
+    # Get question text
+    updated_question_message.text = current_question.question
+    # Define keyboard with answers
+    updated_question_message.keyboard = []
+    for current_answer in (current_question.answer1, current_question.answer2, current_question.answer3):
+        if current_answer is not None:
+            if current_answer == current_question.right_answer:
+                answer = "correct"
+            else:
+                answer = "incorrect"
+            updated_question_message.keyboard.append(
+                [InlineButton(text=current_answer, callback_data=questions_cb.new(action="answer", answer=answer))]
+            )
+        else:
+            pass
+
+    # Add menu button
+    updated_question_message.keyboard.append(
+        [
+            InlineButton(
+                text=features.start_ftr.button,
+                callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+            )
+        ]
+    )
+    return updated_question_message
+
+
+@dp.callback_query_handler(
+    questions_cb.filter(action=features.question_ftr.callback_action),
+    registered=True,
+    state=InterviewQuestion.check_answer,
+)
+async def check_answer(callback: types.CallbackQuery, callback_data: dict, state: FSMContext) -> None:
+    # Check state
+    logger.info(f"Current state: {await state.get_state()}")
+    data = await state.get_data()
+    answers_data = data["right_answers"]
+    # Send message with result
+    if callback_data["answer"] == "correct":
+        text = f"Верно!"
+        answers_data += 1
+        await state.update_data(right_answers=answers_data)
+    else:
+        text = f"Неверно :("
+    # Get keyboard with buttons "Menu" and "Next question"
+    keyboard = await update_answer_message_keyboard()
+    await callback.message.answer(text, reply_markup=Feature.create_tg_inline_kb(keyboard))
+    # Update message after answer the question
+    await callback.message.edit_reply_markup()
+    # Set state
+    await state.set_state(InterviewQuestion.send_question)
+    logger.info(f"State changed. Current state: {await state.get_state()}")
+
+
+async def update_answer_message_keyboard() -> tuple[list[InlineButton], list[InlineButton]]:
+    # Add menu button
+    keyboard = (
+        [
+            InlineButton(
+                text=features.question_ftr.button_in_question,
+                callback_data=questions_cb.new(action=features.question_ftr.callback_action, answer="None"),
+            )
+        ],
+        [
+            InlineButton(
+                text=features.start_ftr.button,
+                callback_data=questions_cb.new(action=features.start_ftr.callback_action, answer="None"),
+            )
+        ],
+    )
+    return keyboard
+
+
+async def finish_quiz(msg: types.CallbackQuery, right_answers: int, all_questions: int):
+    # Update message, delete buttons
+    await msg.message.edit_reply_markup()
+    # Update value answers and questions to user
+    user_questions, user_right_answers = await db.incr_user_questions(
+        tg_user=TgUser(tg_id=msg.from_user.id, username=msg.from_user.username),
+        right_answers=right_answers,
+        all_questions=all_questions,
+    )
+    text = (
+        f"Викторина завершена. Ваш результат: {right_answers}/{all_questions}."
+        f"\nВсего вопросов пройдено: {user_questions}."
+        f"\nВсего верных ответов: {user_right_answers}."
+    )
+    await msg.message.answer(text)
+    logger.debug(os.path.abspath(__file__))
+
+    # Generate picture with ThreadPoolExecutor
+    logger.debug('Start generate picture with ThreadPoolExecutor')
+    path_to_result_pic = await asyncio.to_thread(get_result_quiz_picture, msg, all_questions, right_answers)
+    logger.debug(f'End generate picture with ThreadPoolExecutor. Path: {path_to_result_pic}')
+
+    # Send and delete result picture
+    async with aiofiles.open(path_to_result_pic, 'rb') as photo:
+        await bot_safe_send_photo(dp, msg.from_user.id, photo)
+    await aiofiles.os.remove(path_to_result_pic)
+    logger.debug(f'File with result ({path_to_result_pic}) sent and removed.')
+
+
+def get_result_quiz_picture(msg, questions: int, right_answers: int):
+    path_to_result_quiz_picture = os.path.dirname(os.path.abspath(__file__)) + '/bot_content/result_pic.jpg'
+    logger.debug(f'Path to picture with result of quiz: {path_to_result_quiz_picture}')
+    result_quiz_picture = Image.open(path_to_result_quiz_picture)
+    font = ImageFont.load_default(size=220)
+    pencil = ImageDraw.Draw(result_quiz_picture)
+    text = f'{right_answers}/{questions}'
+    logger.debug(f'Text with result of quiz: {text}')
+    pencil.text((60, 600), text, font=font, stroke_width=5, stroke_fill='purple')
+    path_to_result_quiz_picture = (os.path.dirname(os.path.abspath(__file__))
+                                   + '/bot_content/result_pic'
+                                   + str(msg.from_user.id) + '.jpg')
+    logger.debug(f'Path to save result pic: {path_to_result_quiz_picture}')
+    result_quiz_picture.save(path_to_result_quiz_picture)
+    return path_to_result_quiz_picture
+
+
+# Tap menu button
+@dp.callback_query_handler(questions_cb.filter(action=features.start_ftr.callback_action), registered=True, state="*")
+async def exit_quiz(msg: types.Message | types.CallbackQuery, state: FSMContext) -> None:
+    logger.info("User taps menu button. Ending the quiz, reset answers...")
+    # TODO: Reset answers from data here
+    await msg.message.edit_reply_markup()
+    text = "Вы вышли из викторины, ответы сброшены."
+    # Reset questions and answers in state.data
+    await state.update_data(question_ids=None, answers_data=0)
+    # Send message
+    await msg.message.answer(text)
+    await state.finish()
+    await main_menu(from_user_id=msg.from_user.id)
+
+
 # -------------------------------------------- SERVICE HANDLERS -------------------------------------------------------
 @dp.message_handler(content_types=["any"], not_registered=True)
 async def registration(msg: types.Message) -> types.Message | None:
@@ -247,4 +471,5 @@ async def on_shutdown(dispatcher: DbDispatcher) -> None:
 
 if __name__ == "__main__":
     dp.set_db_conn(conn=setup_db(settings))
+
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown)

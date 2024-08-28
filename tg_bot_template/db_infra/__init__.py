@@ -6,7 +6,7 @@ import playhouse.migrate
 from loguru import logger
 
 from tg_bot_template.config import BotSettings
-from tg_bot_template.db_infra import models
+from tg_bot_template.db_infra import models, question_dict
 
 ALL_TABLES = [data for _, data in inspect.getmembers(models) if isinstance(data, peewee.ModelBase)]
 
@@ -53,6 +53,17 @@ def setup_db(settings: BotSettings) -> peewee_async.Manager:
     _create_tables(database, ALL_TABLES)
     _make_migrations(database)
 
+    # ---------------- QUESTIONS -----------------
+    # Create questions
+    for question, dict_question_data in question_dict.question_dict.items():
+        new_question = models.Questions(question = dict_question_data['question'],
+                                        answer1 = dict_question_data['answer1'],
+                                        answer2 = dict_question_data['answer2'],
+                                        answer3 = dict_question_data['answer3'],
+                                        right_answer=dict_question_data['right_answer'])
+        new_question.save()
+    logger.info(f"Questions added")
+    
     database.close()
     database.set_allow_sync(False)
 

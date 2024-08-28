@@ -30,7 +30,7 @@ ENV PYTHONFAULTHANDLER=1 \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # copy project
-COPY tg_bot_template ./tg_bot_template/
+COPY --chown=app:app tg_bot_template ./tg_bot_template/
 
 # run app
 ENTRYPOINT ["python", "-m"]
